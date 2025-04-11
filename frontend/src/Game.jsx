@@ -4,7 +4,7 @@ import io from 'socket.io-client';
 
 const Game = () => {
   useEffect(() => {
-    const socket = io('http://localhost:3001');
+    const socket = io('http://localhost:3001'); // Make sure server is running
 
     class MyGame extends Phaser.Scene {
       constructor() {
@@ -17,12 +17,16 @@ const Game = () => {
         this.load.image('player', 'https://labs.phaser.io/assets/sprites/mushroom2.png');
       }
 
+      
+
       create() {
-        this.cursors = this.input.keyboard.createCursorKeys();
+        // Debug confirm scene created
+        console.log('✅ Phaser scene started');
+
         this.cameras.main.setBackgroundColor('#222');
+        this.cursors = this.input.keyboard.createCursorKeys();
 
-
-        // ✅ AUDIO CONTEXT FIX HERE
+        // ✅ Audio fix
         this.input.once('pointerdown', () => {
           if (this.sound.context.state === 'suspended') {
             this.sound.context.resume().then(() => {
@@ -31,32 +35,30 @@ const Game = () => {
           }
         });
 
-        // Handle existing players
+        this.socket.on('connect', () => {
+            this.playerId = this.socket.id;
+          });
+          
+
+        // Just for debugging: show a test player sprite
+        this.testPlayer = this.add.sprite(400, 300, 'player').setScale(1.2);
+
+        // Socket: current players
         this.socket.on('currentPlayers', (players) => {
           Object.keys(players).forEach((id) => {
-            if (id === this.socket.id) {
-              this.addPlayer(players[id], true);
-            } else {
-              this.addPlayer(players[id], false);
-            }
+            this.addPlayer(players[id], id === this.socket.id);
           });
         });
 
-        // New player joins
         this.socket.on('newPlayer', (playerInfo) => {
-            const sprite = this.add.sprite(playerInfo.x, playerInfo.y, 'player').setScale(0.2);
-
+          this.addPlayer(playerInfo, false);
         });
 
-        // Player movement
         this.socket.on('playerMoved', (playerInfo) => {
           const player = this.players[playerInfo.id];
-          if (player) {
-            player.setPosition(playerInfo.x, playerInfo.y);
-          }
+          if (player) player.setPosition(playerInfo.x, playerInfo.y);
         });
 
-        // Player disconnect
         this.socket.on('playerDisconnected', (id) => {
           if (this.players[id]) {
             this.players[id].destroy();
@@ -67,38 +69,36 @@ const Game = () => {
 
       addPlayer(playerInfo, isSelf) {
         const sprite = this.add.sprite(playerInfo.x, playerInfo.y, 'player');
-        sprite.setTint(isSelf ? 0x00ff00 : 0xff0000); // Green = self, red = others
+        sprite.setTint(isSelf ? 0x00ff00 : 0xff0000);
         this.players[playerInfo.id] = sprite;
       }
 
       update() {
-        const self = this.players[this.socket.id];
-        if (!self || !this.cursors) return;
-
+        if (!this.testPlayer || !this.cursors) return;
+      
         let moved = false;
         const speed = 4;
-
+      
         if (this.cursors.left.isDown) {
-          self.x -= speed;
+          this.testPlayer.x -= speed;
           moved = true;
         } else if (this.cursors.right.isDown) {
-          self.x += speed;
+          this.testPlayer.x += speed;
           moved = true;
         }
-
+      
         if (this.cursors.up.isDown) {
-          self.y -= speed;
+          this.testPlayer.y -= speed;
           moved = true;
         } else if (this.cursors.down.isDown) {
-          self.y += speed;
+          this.testPlayer.y += speed;
           moved = true;
         }
-
-        if (moved) {
-          this.socket.emit('playerMovement', { x: self.x, y: self.y });
-        }
+      
+        // No need to emit anything to server for testPlayer
       }
     }
+      
 
     const config = {
       type: Phaser.AUTO,
@@ -106,7 +106,8 @@ const Game = () => {
       height: 600,
       parent: 'game-container',
       scene: MyGame,
-      physics: { default: 'arcade' }
+      physics: { default: 'arcade' },
+      backgroundColor: '#222'
     };
 
     const game = new Phaser.Game(config);
@@ -116,8 +117,8 @@ const Game = () => {
       socket.disconnect();
     };
   }, []);
-  return <div id="game-container" style={{ width: '800px', height: '600px' }} />;
 
+  return <div id="game-container" style={{ width: '800px', height: '600px', margin: '0 auto' }} />;
 };
 
 export default Game;
